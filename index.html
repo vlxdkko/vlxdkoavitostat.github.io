@@ -9,101 +9,107 @@
 </head>
 <body>
 
-    <h1>Генерация графика из Excel</h1>
+    <h1>Загрузите Excel файл для генерации графика</h1>
 
+    <!-- Элемент input для выбора файла -->
+    <input type="file" id="fileInput" accept=".xlsx, .xls, .csv">
+    
+    <!-- Чекбоксы для выбора категорий -->
     <div id="categoriesDiv"></div>
+
+    <!-- Место для отображения графика -->
     <canvas id="myChart" width="400" height="200"></canvas>
 
     <script>
+        // Глобальная переменная для графика
         let chart;
 
-        // URL файла на вашем локальном сервере
-        const fileUrl = "http://localhost:3000/files/yourfile.xlsx"; // Путь к файлу на сервере
+        document.getElementById("fileInput").addEventListener("change", function(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                
+                // Считываем содержимое файла
+                reader.onload = function(e) {
+                    const data = e.target.result;
+                    const wb = XLSX.read(data, { type: "array" });
+                    const ws = wb.Sheets[wb.SheetNames[0]]; // Извлекаем первый лист
+                    const jsonData = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
-        fetch(fileUrl)
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error("Ошибка при загрузке файла: " + response.statusText);
-                }
-                return response.arrayBuffer();
-            })
-            .then(data => {
-                const wb = XLSX.read(data, { type: "array" });
-                const ws = wb.Sheets[wb.SheetNames[0]]; // Извлекаем первый лист
-                const jsonData = XLSX.utils.sheet_to_json(ws, { header: 1 });
+                    // Парсим данные, начиная с второй строки, чтобы исключить заголовок
+                    const categories = jsonData.slice(1).map(row => row[0]); // Первый столбец - категории
+                    const dates = jsonData[0].slice(2); // Даты - с 3-го столбца
+                    const viewsData = jsonData.slice(1).map(row => row.slice(2));
 
-                if (jsonData.length === 0) {
-                    throw new Error("Файл пустой или содержит неправильные данные.");
-                }
-
-                const categories = jsonData.slice(1).map(row => row[0]); // Первый столбец - категории
-                const dates = jsonData[0].slice(2); // Даты - с 3-го столбца
-                const viewsData = jsonData.slice(1).map(row => row.slice(2));
-
-                const categoriesDiv = document.getElementById("categoriesDiv");
-                categoriesDiv.innerHTML = "";
-                categories.forEach((category, index) => {
-                    const checkbox = document.createElement("input");
-                    checkbox.type = "checkbox";
-                    checkbox.id = "category-" + index;
-                    checkbox.value = category;
-                    checkbox.checked = true;
-                    checkbox.addEventListener("change", updateChart);
-                    categoriesDiv.appendChild(checkbox);
-                    categoriesDiv.appendChild(document.createTextNode(category));
-                    categoriesDiv.appendChild(document.createElement("br"));
-                });
-
-                let selectedCategories = categories.slice();
-
-                function updateChart() {
-                    selectedCategories = categories.filter((category, index) => {
-                        const checkbox = document.getElementById("category-" + index);
-                        return checkbox.checked;
+                    // Динамическое создание чекбоксов для выбора категорий
+                    const categoriesDiv = document.getElementById("categoriesDiv");
+                    categoriesDiv.innerHTML = ""; // Очистим старые чекбоксы
+                    categories.forEach((category, index) => {
+                        const checkbox = document.createElement("input");
+                        checkbox.type = "checkbox";
+                        checkbox.id = "category-" + index;
+                        checkbox.value = category;
+                        checkbox.checked = true;
+                        checkbox.addEventListener("change", updateChart);
+                        categoriesDiv.appendChild(checkbox);
+                        categoriesDiv.appendChild(document.createTextNode(category));
+                        categoriesDiv.appendChild(document.createElement("br"));
                     });
 
-                    const selectedData = viewsData.filter((row, index) => selectedCategories.includes(categories[index]));
+                    // Функция обновления графика на основе выбранных категорий
+                    let selectedCategories = categories.slice(); // Изначально все категории выбраны
 
-                    const chartData = {
-                        labels: dates,
-                        datasets: selectedData.map((data, index) => ({
-                            label: categories[index],
-                            data: data,
-                            borderColor: getRandomColor(),
-                            fill: false
-                        }))
-                    };
+                    function updateChart() {
+                        selectedCategories = categories.filter((category, index) => {
+                            const checkbox = document.getElementById("category-" + index);
+                            return checkbox.checked;
+                        });
 
-                    if (chart) {
-                        chart.destroy();
-                    }
+                        const selectedData = viewsData.filter((row, index) => selectedCategories.includes(categories[index]));
 
-                    chart = new Chart(document.getElementById("myChart"), {
-                        type: "line",
-                        data: chartData,
-                        options: {
-                            responsive: true,
-                            plugins: {
-                                title: {
-                                    display: true,
-                                    text: 'Просмотры по выбранным категориям'
-                                },
-                                tooltip: {
-                                    mode: 'index',
-                                    intersect: false,
+                        // Подготовка данных для графика
+                        const chartData = {
+                            labels: dates,
+                            datasets: selectedData.map((data, index) => ({
+                                label: categories[index],
+                                data: data,
+                                borderColor: getRandomColor(),
+                                fill: false
+                            }))
+                        };
+
+                        if (chart) {
+                            chart.destroy(); // Удаляем старый график
+                        }
+
+                        // Строим новый график
+                        chart = new Chart(document.getElementById("myChart"), {
+                            type: "line",
+                            data: chartData,
+                            options: {
+                                responsive: true,
+                                plugins: {
+                                    title: {
+                                        display: true,
+                                        text: 'Просмотры по выбранным категориям'
+                                    },
+                                    tooltip: {
+                                        mode: 'index',
+                                        intersect: false,
+                                    }
                                 }
                             }
-                        }
-                    });
-                }
+                        });
+                    }
 
-                updateChart();
-            })
-            .catch(error => {
-                console.error("Ошибка при загрузке файла:", error);
-                alert("Ошибка при загрузке файла: " + error.message);
-            });
+                    updateChart(); // Первоначальная отрисовка графика
+                };
 
+                reader.readAsArrayBuffer(file); // Чтение файла как массива байтов
+            }
+        });
+
+        // Генерация случайного цвета для линий на графике
         function getRandomColor() {
             const letters = "0123456789ABCDEF";
             let color = "#";
